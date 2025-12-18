@@ -1,0 +1,187 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOPROD — Drag & Drop (v2, robuste)</title>
+<style>
+  :root{ --bg:#0f172a; --panel:#111827; --accent:#22d3ee; --accent2:#a78bfa; --good:#22c55e; --bad:#ef4444; --text:#e5e7eb; }
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 10% 10%,#1e293b 0%,#0f172a 60%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial;}
+  header{padding:22px;text-align:center}
+  h1{margin:0 0 6px;font-size:clamp(1.4rem,1.1rem+1.5vw,2.1rem);background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .subtitle{opacity:.9;font-size:.95rem}
+  .tip{opacity:.8;font-size:.9rem;margin-top:6px}
+  .panel{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 24px;max-width:1100px;margin:0 auto 8px}
+  .score{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;display:flex;gap:12px;align-items:center}
+  .progress{width:240px;height:12px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+  .bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s ease}
+  .btn{font-size:.95rem;background:linear-gradient(90deg,#111827,#0b132b);color:var(--text);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 12px;cursor:pointer;transition:transform .15s ease,box-shadow .2s ease}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.3)}
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:24px;max-width:1100px;margin:0 auto}
+  .left,.right{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px}
+  .zones{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .zone{min-height:130px;border:2px dashed rgba(255,255,255,.25);border-radius:12px;padding:10px;position:relative;overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02))}
+  .zone h3{margin:0 0 8px;font-size:1rem}
+  .zone.active{border-color:var(--accent)}
+  .dropbin{display:flex;flex-wrap:wrap;gap:8px}
+  .card{user-select:none;cursor:grab;background:#0b132b;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 12px;max-width:340px;color:#f8fafc;box-shadow:0 6px 16px rgba(0,0,0,.35);transition:transform .2s ease,box-shadow .2s ease,border-color .2s}
+  .card .t{font-weight:700;font-size:.97rem;margin-bottom:4px}
+  .card .d{opacity:.9;font-size:.9rem}
+  .card:active{cursor:grabbing;transform:scale(.98)}
+  .card.selected{border-color:var(--accent);box-shadow:0 8px 20px rgba(34,211,238,.25)}
+  .card.correct{border-color:rgba(34,197,94,.9);box-shadow:0 8px 20px rgba(34,197,94,.25)}
+  .card.wrong{animation:shake .35s ease both}
+  .ghost{opacity:.35}
+  @keyframes shake{10%{transform:translateX(-2px) rotate(-1deg)}30%{transform:translateX(3px) rotate(1deg)}50%{transform:translateX(-3px) rotate(-1deg)}70%{transform:translateX(2px) rotate(1deg)}90%{transform:translateX(0) rotate(0)}}
+  .feedback{min-height:28px;font-size:.95rem;line-height:1.25}.feedback.good{color:var(--good)}.feedback.bad{color:var(--bad)}
+  .confetti{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden}
+  .piece{position:absolute;width:10px;height:16px;opacity:.9;transform:translateY(-100px) rotate(0deg);animation:fall 3s ease-in forwards}
+  @keyframes fall{0%{transform:translateY(-100px) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}
+  footer{text-align:center;padding:12px;opacity:.7;font-size:.85rem}
+</style>
+</head>
+<body>
+  <header>
+    <h1>SOPROD — Drag & Drop (v2)</h1>
+    <p class="subtitle">Associe chaque <strong>qualification</strong> au bon <strong>statut</strong> (Honoré, Reporté, Injoignable, Honoré suite RDV connexion). Même humour, fonctionnalités + un mode <em>clic‑pour‑déposer</em> si le drag & drop est bloqué ✨</p>
+    <p class="tip">Astuce : si tu ouvres le fichier dans un aperçu (Teams/SharePoint/Outlook), télécharge‑le puis ouvre‑le dans ton navigateur pour activer toutes les interactions.</p>
+  </header>
+
+  <div class="panel" role="region" aria-label="Panneau de contrôle">
+    <div class="score" aria-live="polite">
+      <span>Score : <b id="score">0</b>/<b id="total">0</b></span>
+      <div class="progress" aria-label="Progression"><div class="bar" id="bar"></div></div>
+      <span>Tentatives : <b id="tries">0</b></span>
+    </div>
+    <div>
+      <button id="reshuffle" class="btn">🔀 Rejouer / Mélanger</button>
+      <button id="reset" class="btn">♻️ Tout réinitialiser</button>
+    </div>
+  </div>
+
+  <main class="board" role="main">
+    <section class="left" aria-label="Cartes à glisser">
+      <h2 style="margin:0 0 8px">Cartes — Qualifications</h2>
+      <div id="deck" class="dropbin" aria-describedby="help-deck"></div>
+      <p id="help-deck" class="feedback" aria-live="assertive">💡 Tu peux <strong>glisser‑déposer</strong> ou <strong>cliquer une carte puis cliquer une zone</strong>.</p>
+    </section>
+
+    <aside class="right" aria-label="Zones de dépôt">
+      <h2 style="margin:0 0 8px">Statuts cibles</h2>
+      <div class="zones">
+        <div class="zone" data-zone="HONORE"><h3>Honoré</h3><div class="dropbin"></div></div>
+        <div class="zone" data-zone="REPORTE"><h3>Reporté</h3><div class="dropbin"></div></div>
+        <div class="zone" data-zone="INJOIGNABLE"><h3>Injoignable / Indisponible</h3><div class="dropbin"></div></div>
+        <div class="zone" data-zone="HONORE_CONNEXION"><h3>Honoré (suite RDV connexion)</h3><div class="dropbin"></div></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="confetti" id="confetti" aria-hidden="true"></div>
+
+  <footer>Créé pour la formation — Drag & Drop HTML/CSS/JS · v2 © 2025</footer>
+
+<script>
+// === Données des cartes (extraits du tableau SOPROD) ===
+const CARDS = [
+  // HONORE
+  { title: "ONBOARDING FINALISÉ", desc: "Fiche → 'onboarding finalisé' + ouverture du coaching via SLM.", target: "HONORE" },
+  { title: "ONBOARDING RÉALISÉ — MÉMO", desc: "Besoin de plus de temps sans le client, fiche reste 'ONB Client'.", target: "HONORE" },
+  { title: "ONBOARDING RÉALISÉ — RDV PRODUCTEUR", desc: "Onboarding pas terminé, créer un RDV (1h).", target: "HONORE" },
+  { title: "ONBOARDING RÉALISÉ — PRISE DE RDV SLM", desc: "Pas de RDV posé, client prend RDV via SLM (J+7 → Campagne ONB).", target: "HONORE" },
+  { title: "ONBOARDING RÉALISÉ — REFUS CLIENT", desc: "Client ne souhaite pas l'onboarding → finalisé + coaching SLM.", target: "HONORE" },
+  { title: "ONBOARDING RÉALISÉ — RDV AGENDA", desc: "Appel à un service tiers agenda, fiche reste 'ONB Client'.", target: "HONORE" },
+  { title: "ONBOARDING RÉALISÉ — RDV CONNEXION", desc: "Appel à un service tiers connexions, fiche reste 'ONB Client'.", target: "HONORE" },
+
+  // REPORTE
+  { title: "ONB RDV PRODUCTEUR (report)", desc: "Client demande à reporter → créer évènement 1h (reste 'ONB Client').", target: "REPORTE" },
+  { title: "RDV MYCONNECT (indispo)", desc: "Client indisponible (MyConnect/Agenda/Refprio) → repositionner un RDV.", target: "REPORTE" },
+
+  // INJOIGNABLE / INDISPONIBLE
+  { title: "ONB CLIENT INJOIGNABLE / INDISPO", desc: "3 appels infructueux (H, +10, +30) → 'En attente Onboarding' + RDV SLM.", target: "INJOIGNABLE" },
+
+  // HONORE suite RDV connexion
+  { title: "ONBOARDING FINALISÉ CONNEXION", desc: "Connexions terminées → finalisé + coaching SLM.", target: "HONORE_CONNEXION" },
+  { title: "ONBOARDING RÉALISÉ — RDV PRODUCTEUR CONNEXION", desc: "Connexions non terminées → RDV (1h), reste 'ONB Client'.", target: "HONORE_CONNEXION" },
+  { title: "ONBOARDING FINALISÉ — CONNEXION KO", desc: "Notifications Google manquantes → ouvrir coaching pour RDV via SLM.", target: "HONORE_CONNEXION" }
+];
+
+// === Feedbacks fun ===
+const GOOD_FEEDBACKS = ["🥳 Bingo !", "🟢 Nickel chrome !", "🎯 Pile dans le mille !", "💪 Geste clé maîtrisé !", "✨ Clap clap !"];
+const BAD_FEEDBACKS  = ["😅 Oups… pas ce statut.", "🔄 Presque ! Tu chauffes…", "🧩 Mauvaise pièce, retente !", "🙃 Hmm… essaie une autre zone."];
+
+let score = 0; let tries = 0; const total = CARDS.length;
+const deck = document.getElementById('deck');
+const bar = document.getElementById('bar');
+const scoreEl = document.getElementById('score');
+const totalEl = document.getElementById('total');
+const triesEl = document.getElementById('tries');
+const confettiEl = document.getElementById('confetti');
+
+function announce(msg, good=false){ const el = document.getElementById('help-deck'); el.textContent = msg; el.className = 'feedback ' + (good ? 'good' : 'bad'); }
+function updateProgress(){ scoreEl.textContent = String(score); totalEl.textContent = String(total); triesEl.textContent = String(tries); bar.style.width = ((score/total)*100).toFixed(0) + '%'; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+function cardTemplate(data, idx){
+  const el = document.createElement('div'); el.className='card'; el.draggable=true; el.id='card-'+idx; el.dataset.target=data.target;
+  el.innerHTML = `<div class="t">${data.title}</div><div class="d">${data.desc}</div>`;
+  // Native drag & drop
+  el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', el.id); setTimeout(()=> el.classList.add('ghost'), 1); });
+  el.addEventListener('dragend', ()=> el.classList.remove('ghost'));
+  // Click-to-assign fallback
+  el.addEventListener('click', ()=>{ document.querySelectorAll('.card.selected').forEach(c=> c.classList.remove('selected')); el.classList.add('selected'); announce('👉 Choisis maintenant une zone de statut pour déposer.'); });
+  return el;
+}
+
+function setupDeck(){
+  deck.innerHTML=''; shuffle([...CARDS]).forEach((c,i)=> deck.appendChild(cardTemplate(c,i)));
+  score=0; tries=0; updateProgress(); announce('Glisse ou clique une carte, puis clique une zone.');
+}
+
+function successBurst(){ for(let i=0;i<18;i++){ const p=document.createElement('div'); p.className='piece'; p.style.left=(50+(Math.random()*20-10))+'vw'; p.style.top='-10vh'; const colors=['#22d3ee','#a78bfa','#f59e0b','#22c55e','#ef4444','#e11d48']; p.style.background=colors[Math.floor(Math.random()*colors.length)]; p.style.transform=`translateY(-100px) rotate(${Math.random()*360}deg)`; p.style.animationDuration=(2+Math.random()*1.5)+'s'; confettiEl.appendChild(p); setTimeout(()=> p.remove(), 3200);} }
+function celebrateAll(){ announce('🎉 Parfait ! Toutes les cartes sont correctement placées.', true); for(let i=0;i<100;i++){ const p=document.createElement('div'); p.className='piece'; p.style.left=Math.random()*100+'vw'; p.style.top='-10vh'; const colors=['#22d3ee','#a78bfa','#f59e0b','#22c55e','#ef4444','#e11d48']; p.style.background=colors[Math.floor(Math.random()*colors.length)]; p.style.animationDuration=(2.4+Math.random()*1.8)+'s'; confettiEl.appendChild(p); setTimeout(()=> p.remove(), 4200);} }
+
+function handlePlacement(card, zone){
+  tries++;
+  const target = card.dataset.target; const zoneKey = zone.dataset.zone;
+  if(target === zoneKey){
+    zone.querySelector('.dropbin').appendChild(card);
+    card.classList.remove('wrong','selected'); card.classList.add('correct'); card.draggable=false;
+    announce(GOOD_FEEDBACKS[Math.floor(Math.random()*GOOD_FEEDBACKS.length)], true);
+    score++; successBurst(); if(navigator.vibrate) try{ navigator.vibrate(20) }catch(e){}
+  } else {
+    card.classList.add('wrong'); deck.appendChild(card); announce(BAD_FEEDBACKS[Math.floor(Math.random()*BAD_FEEDBACKS.length)], false); if(navigator.vibrate) try{ navigator.vibrate([0,40,0]) }catch(e){}
+  }
+  updateProgress(); if(score===total) celebrateAll();
+}
+
+function setupZones(){
+  document.querySelectorAll('.zone').forEach(zone=>{
+    // Drag & drop
+    zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('active'); });
+    zone.addEventListener('dragleave', ()=> zone.classList.remove('active'));
+    zone.addEventListener('drop', e=>{
+      e.preventDefault(); zone.classList.remove('active'); const id = e.dataTransfer.getData('text/plain'); const card = document.getElementById(id); if(!card) return; handlePlacement(card, zone);
+    });
+    // Click-to-assign fallback
+    zone.addEventListener('click', ()=>{
+      const selected = document.querySelector('.card.selected'); if(!selected) { announce('🙋‍♀️ Sélectionne d’abord une carte.'); return; }
+      handlePlacement(selected, zone);
+    });
+  });
+}
+
+function resetAll(){ document.querySelectorAll('.zone .dropbin').forEach(b=> b.innerHTML=''); document.querySelectorAll('.card').forEach(c=>{ c.classList.remove('correct','wrong','selected'); c.draggable=true; deck.appendChild(c); }); score=0; tries=0; updateProgress(); announce('C’est reparti !'); }
+function reshuffleAll(){ const all=[...document.querySelectorAll('.card')]; all.forEach(c=>{ c.classList.remove('correct','wrong','selected'); c.draggable=true; deck.appendChild(c); }); // shuffle deck
+  const frag=document.createDocumentFragment(); shuffle(all).forEach(c=> frag.appendChild(c)); deck.innerHTML=''; deck.appendChild(frag); score=0; tries=0; updateProgress(); announce('Cartes mélangées !'); }
+
+// Buttons
+ document.getElementById('reset').addEventListener('click', resetAll);
+ document.getElementById('reshuffle').addEventListener('click', reshuffleAll);
+
+// Init
+setupDeck(); setupZones(); updateProgress();
+</script>
+</body>
+</html>
